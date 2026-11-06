@@ -1,0 +1,14 @@
+{
+  "name": "emotion-companion",
+  "version": "1.0.0",
+  "description": "情感陪伴 AI - 本地 Ollama 与云端免费 API 可切换",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.3"
+  }
+}

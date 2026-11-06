@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>暖屿 · 管理后台</title>
+  <link rel="stylesheet" href="./style.css" />
+  <style>
+    .admin-wrap { max-width: 920px; margin: 0 auto; padding: 24px; }
+    .admin-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 18px; }
+    .admin-card h2 { margin: 0 0 14px; font-size: 16px; }
+    .login-box { max-width: 360px; margin: 12vh auto; }
+    .key-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+    .key-row .kname { width: 220px; font-size: 14px; color: var(--ink); }
+    .key-row input { flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-family: inherit; font-size: 13px; }
+    .key-row .kstate { width: 120px; font-size: 12px; text-align: right; }
+    .ok { color: #2e8b57; } .no { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-weight: 600; }
+    td.num { font-variant-numeric: tabular-nums; }
+    .admin-btn { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 9px 16px; cursor: pointer; font-size: 14px; font-weight: 600; }
+    .admin-btn.ghost { background: #fff; color: var(--muted); border: 1px solid var(--line); }
+    .admin-top { display: flex; align-items: center; margin-bottom: 18px; }
+    .admin-top h1 { font-size: 18px; margin: 0; }
+    .admin-top .spacer { flex: 1; }
+    .note { font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .msg { font-size: 13px; margin-top: 10px; }
+    .msg.ok { color: #2e8b57; } .msg.err { color: #c0392b; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- 登录 -->
+    <div v-if="!token" class="admin-wrap">
+      <div class="admin-card login-box">
+        <h2>管理员登录</h2>
+        <label class="field"><span>密码</span>
+          <input type="password" v-model="password" @keydown.enter="login" placeholder="首次运行见服务端控制台" />
+        </label>
+        <button class="admin-btn" @click="login">登录</button>
+        <div class="msg err" v-if="err">{{ err }}</div>
+      </div>
+    </div>
+
+    <!-- 后台主体 -->
+    <div v-else class="admin-wrap">
+      <div class="admin-top">
+        <h1>🌿 暖屿 · 管理后台</h1>
+        <div class="spacer"></div>
+        <button class="admin-btn ghost" @click="logout">退出</button>
+      </div>
+
+      <div class="admin-card">
+        <h2>站点默认 Key（用户不填时自动兜底）</h2>
+        <div class="key-row" v-for="p in settings" :key="p.id">
+          <div class="kname">{{ p.name }}</div>
+          <input type="password" v-model="keyInputs[p.id]" :placeholder="p.hasKey ? ('当前：' + p.masked) : '填入默认 Key'" autocomplete="off" />
+          <div class="kstate" :class="p.hasKey ? 'ok' : 'no'">{{ p.hasKey ? '已配置' : '未配置' }}</div>
+        </div>
+        <button class="admin-btn" @click="saveKeys">保存默认 Key</button>
+        <div class="msg ok" v-if="saveMsg">{{ saveMsg }}</div>
+      </div>
+
+      <div class="admin-card">
+        <h2>用量统计 <span class="note">（仅统计“站点默认 Key”的消耗；用户自带 Key 不计）</span></h2>
+        <p class="note">统计日期：{{ usage.today }}</p>
+        <table>
+          <thead>
+            <tr><th>服务商</th><th>默认Key</th><th>总请求</th><th>今日请求</th><th>总 Token</th><th>今日 Token</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in usage.rows" :key="r.id">
+              <td>{{ r.name }}</td>
+              <td :class="r.hasDefault ? 'ok' : 'no'">{{ r.hasDefault ? '有' : '无' }}</td>
+              <td class="num">{{ r.totalRequests }}</td>
+              <td class="num">{{ r.todayRequests }}</td>
+              <td class="num">{{ r.totalTokens.toLocaleString() }}</td>
+              <td class="num">{{ r.todayTokens.toLocaleString() }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="admin-card">
+        <h2>修改管理员密码</h2>
+        <label class="field"><span>新密码（至少 6 位）</span>
+          <input type="password" v-model="newPwd" placeholder="留空则不修改" autocomplete="off" />
+        </label>
+        <button class="admin-btn" @click="saveKeys">保存（含密码）</button>
+      </div>
+
+      <p class="note">部署提示：宝塔里新建站点 → 反向代理到 <b>http://127.0.0.1:3000</b>（PORT 环境变量可改端口）；用 pm2 保活（<b>pm2 start server.js</b>）。</p>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          token: localStorage.getItem('warmisle_admin_token') || '',
+          password: '', err: '', saveMsg: '',
+          settings: [], keyInputs: {}, newPwd: '',
+          usage: { today: '', rows: [] },
+        };
+      },
+      methods: {
+        async login() {
+          this.err = '';
+          try {
+            const r = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: this.password }) });
+            const d = await r.json();
+            if (!r.ok) { this.err = d.error || '登录失败'; return; }
+            this.token = d.token;
+            localStorage.setItem('warmisle_admin_token', d.token);
+            this.loadAll();
+          } catch (e) { this.err = '网络错误'; }
+        },
+        logout() { this.token = ''; localStorage.removeItem('warmisle_admin_token'); },
+        async loadAll() {
+          const h = { Authorization: 'Bearer ' + this.token };
+          const s = await (await fetch('/api/admin/settings', { headers: h })).json();
+          this.settings = s.providers || [];
+          this.keyInputs = {};
+          for (const p of this.settings) this.keyInputs[p.id] = '';
+          const u = await (await fetch('/api/admin/usage', { headers: h })).json();
+          this.usage = u;
+        },
+        async saveKeys() {
+          this.saveMsg = '';
+          const keys = {};
+          for (const p of this.settings) if (this.keyInputs[p.id]) keys[p.id] = this.keyInputs[p.id];
+          const body = { keys };
+          if (this.newPwd) body.adminPassword = this.newPwd;
+          const r = await fetch('/api/admin/settings', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token }, body: JSON.stringify(body) });
+          const d = await r.json();
+          if (r.ok) {
+            this.saveMsg = '已保存 ✓';
+            this.newPwd = '';
+            if (body.adminPassword) { this.saveMsg = '已保存并修改密码，请重新登录 ✓'; this.logout(); }
+            this.loadAll();
+          } else { this.saveMsg = (d.error || '保存失败'); }
+        },
+      },
+      mounted() { if (this.token) this.loadAll(); },
+    }).mount('#app');
+  </script>
+</body>
+</html>

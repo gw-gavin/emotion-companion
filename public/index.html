@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>暖屿 · 情感陪伴 AI</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="app" :class="{ 'sidebar-open': sidebarOpen }">
+    <!-- 侧边设置栏 -->
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="logo">🌿</span>
+        <div>
+          <div class="brand-name">暖屿</div>
+          <div class="brand-sub">你的情感陪伴 AI</div>
+        </div>
+      </div>
+
+      <section class="card">
+        <h3>陪伴人格</h3>
+        <div class="persona-list">
+          <button v-for="p in personas" :key="p.id"
+                  :class="['persona', { active: persona === p.id }]"
+                  @click="persona = p.id">
+            <span class="persona-emoji">{{ p.emoji }}</span>{{ p.name }}
+          </button>
+        </div>
+        <textarea v-if="persona === 'custom'" v-model="customPrompt"
+                  class="custom-prompt" rows="4"
+                  placeholder="自定义人格设定，例如：你是一个安静的树洞……"></textarea>
+      </section>
+
+      <section class="card">
+        <h3>今天的心情</h3>
+        <div class="mood-list">
+          <button v-for="m in moods" :key="m"
+                  :class="['mood', { active: mood === m }]"
+                  @click="mood = (mood === m ? '' : m)">{{ m }}</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>模型设置</h3>
+        <label class="field">
+          <span>服务商</span>
+          <select v-model="provider" @change="onProviderChange">
+            <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>模型</span>
+          <select v-model="model">
+            <option v-for="m in modelOptions" :key="m" :value="m">{{ m }}</option>
+          </select>
+        </label>
+        <label v-if="needKey" class="field">
+          <span>API Key（可选）</span>
+          <input type="password" v-model="apiKey" placeholder="留空则用站点默认额度" autocomplete="off" />
+        </label>
+        <p class="hint" v-if="keyHint">{{ keyHint }}</p>
+        <label class="field">
+          <span>温度 {{ temperature.toFixed(2) }}</span>
+          <input type="range" min="0" max="1.5" step="0.05" v-model.number="temperature" />
+        </label>
+      </section>
+
+      <button class="ghost-btn" @click="clearChat">清空对话</button>
+    </aside>
+
+    <!-- 主聊天区 -->
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn" @click="sidebarOpen = !sidebarOpen">☰</button>
+        <div class="topbar-title">{{ currentPersonaName }} · {{ model }}</div>
+        <div class="topbar-status" :class="{ err: errorMsg }">
+          {{ errorMsg ? '⚠ ' + errorMsg : (sending ? '正在回应…' : (usingSiteKey ? '站点默认额度' : '在线')) }}
+        </div>
+      </header>
+
+      <div class="messages" ref="msgBox">
+        <div v-if="messages.length === 0" class="empty">
+          <div class="empty-emoji">🌊</div>
+          <p>我是暖屿，随时在这里听你说说话。</p>
+          <p class="empty-sub">左边可以选择陪伴人格、说说今天的心情，或切换模型。</p>
+        </div>
+        <div v-for="(m, i) in messages" :key="i"
+             :class="['msg', m.role === 'user' ? 'me' : 'ai']">
+          <div class="avatar">{{ m.role === 'user' ? '🙂' : '🌿' }}</div>
+          <div class="bubble">
+            <span v-if="m.role === 'assistant' && !m.content && sending && i === messages.length - 1" class="typing">正在思考…</span>
+            <span v-else style="white-space: pre-wrap">{{ m.content }}</span>
+          </div>
+        </div>
+      </div>
+
+      <footer class="inputbar">
+        <textarea v-model="inputText" @keydown.enter.exact.prevent="sendMessage"
+                  placeholder="说点什么吧…（Enter 发送，Shift+Enter 换行）" rows="1"></textarea>
+        <button class="send-btn" :disabled="sending || !inputText.trim()" @click="sendMessage">
+          {{ sending ? '…' : '发送' }}
+        </button>
+      </footer>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
